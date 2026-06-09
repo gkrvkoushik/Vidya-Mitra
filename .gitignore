@@ -74,3 +74,6 @@ lib-cov/
 .grunt/
 bower_components/
 .lock-wscript
+
+
+firebase_config.js
