@@ -1,0 +1,47 @@
+1. registration
+-----------------------
+user signups/login using google account
+If new user redirect to profile completion 
+Profile
+    Name
+    College
+    Graduation Year
+    Resume
+    SKills
+
+2. Resume evaluation and Analysis
+----------------------
+User can upload resume/keep the default resume and select prefered role/job description
+Agent analyses the resume with job description and finds the missing skill gaps and suggests the fixes
+Gives a score 
+
+3. Prefered Career path recommendation
+-----------------------
+Based on resume and skill analysis agent suggests the career path suggestions
+Gives recommended certifications.
+Get your personalised roadmap based on skill and pace of learning
+
+4. Track your roadmap (Roadmaps)
+    Give prefered role or skill and obtain the roadmap
+
+
+5. Generate quizes based on selected skill and evaluate your performance in that topic
+    Quizes need to be of dynamically generated based on the toughness
+    The user performance can be ranking sytem of badges (Bronze,Silver,Gold,Diamond,Platinum,Master)
+    The points division should be as follows 
+        0 - 250 bronze
+        251 - 500 silver
+        501 - 1000 gold
+        1001 - 1500 diamond
+        1501 - 2500 platinum
+        2500+ master
+
+    each quiz should be of 10 questions correct +5 wrong -1 not attempted 0
+
+    It should be designed in full screen( 3 attempts to exit full screen shall end test and allowed attempt test upto 30 minutes)
+
+6. See the progress
+
+7. AI Powered Mock Interview (Final Integration - not to be implemented now)
+
+

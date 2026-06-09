@@ -1,0 +1,62 @@
+# VidyaGuide AI - Landing Page & Dashboard Context
+
+This workspace contains a modular, high-fidelity React application for **VidyaGuide AI** featuring an interactive landing page, a mock Google Authentication system, and a detailed career guidance dashboard.
+
+## File Structure
+
+- [index.html](file:///e:/Agent-2k26/frontend/index.html): Custom Google Font loading (`Plus Jakarta Sans`) and SEO meta headers.
+- [src/App.jsx](file:///e:/Agent-2k26/frontend/src/App.jsx): Root coordinator managing global states (isLoggedIn, user object, theme) and layout loading routing.
+- [src/components/LandingPage.jsx](file:///e:/Agent-2k26/frontend/src/components/LandingPage.jsx): Premium landing page displaying custom vector designs (anime character coding at a desk with floating stats badges in light mode, or a dark dashboard overview mockup in dark mode). Connecting CTA links to trigger sign-in popups.
+- [src/components/GoogleSignInModal.jsx](file:///e:/Agent-2k26/frontend/src/components/GoogleSignInModal.jsx): High-fidelity mock Google Account chooser. Allows selecting preset accounts (Koushik, Vamsi) or filling in custom names and emails.
+- [src/components/Dashboard.jsx](file:///e:/Agent-2k26/frontend/src/components/Dashboard.jsx): Modular authenticated student dashboard containing left-side fixed navigation controls, top header controls, and a multi-grid widget area.
+- [src/index.css](file:///e:/Agent-2k26/frontend/src/index.css): Shared styling sheet detailing dark/light themes, animations, isometric designs, timeline flows, and responsive grids.
+- [src/App.css](file:///e:/Agent-2k26/frontend/src/App.css): Cleared to prevent style pollution.
+
+## Dashboard Interactive Capabilities
+
+1. **Preset Account Login & Redirection**: Clicking "Sign in with Google" prompts for account selection. Logging in redirects you to the personalized dashboard showing the chosen user name, email, and avatar.
+2. **Theme Controls**: The top header bar's theme selector changes dashboard palettes instantly between light and dark settings.
+3. **Timeline Node Toggles**: Checking/unchecking steps (Python, Statistics, ML, Deep Learning) in the Roadmap Progress timeline card dynamically adjusts:
+   - Total Points (adds/subtracts 100 XP per milestone).
+   - Completed milestones metrics.
+   - Roadmap Completion percentage gauge.
+   - Next Recommended Step card progress indicators.
+4. **AI Mentor Dialogue Console**: Inputting questions in the "Ask AI Mentor" console and clicking send triggers responses tailored to your logged-in name, referencing ATS scores, roadmap metrics, or badge details.
+5. **Search Bar Filters**: Typing inside the top search bar filters the Skills Overview lists in real-time.
+6. **User Dropdown & Log Out**: Clicking the user email caret opens a settings menu. Clicking "Log Out" wipes the session cookie simulation and returns you back to the home page.
+
+## Styling Design Tokens
+
+### 1. Light Theme
+- Page Background: `#F8F9FC`
+- Card Background: `#FFFFFF`
+- Main Text: `#1F2937`
+- Accent Purple: `#7E46F0`
+- Pale Purple Background: `#F0EBFF`
+- Status Green: `#10B981`
+- Status Gold: `#F59E0B`
+- Status Blue: `#3B82F6`
+
+### 2. Dark Theme
+- Page Background: `#10101A`
+- Card Background: `#1A1A2E`
+- Main Text: `#E5E7EB`
+- Accent Purple: `#8A55FF`
+- Pale Purple Text: `#D1C9FF`
+- Special Card Background: `#2E2E4A`
+- Status Green: `#34D399`
+- Status Gold: `#FBBF24`
+- Status Blue: `#60A5FA`
+
+## Launch Instructions
+
+To launch the local development server:
+```bash
+npm install
+npm run dev
+```
+
+To compile production assets:
+```bash
+npm run build
+```

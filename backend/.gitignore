@@ -1,0 +1,70 @@
+# ── Environment variables (NEVER commit secrets) ──────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Python bytecode ────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+
+# ── Virtual environments ───────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# ── uv (Python package manager) ───────────────────────────────────────────────
+.uv/
+# Keep uv.lock committed so installs are reproducible
+# uv.lock
+
+# ── Distribution / packaging ───────────────────────────────────────────────────
+dist/
+build/
+*.egg-info/
+*.egg
+.eggs/
+MANIFEST
+
+# ── Testing & coverage ─────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+coverage/
+htmlcov/
+.tox/
+.nox/
+
+# ── Type checkers ──────────────────────────────────────────────────────────────
+.mypy_cache/
+.dmypy.json
+.pyre/
+.pytype/
+
+# ── Jupyter Notebooks ──────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+
+# ── Logs ───────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── OS generated ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ── IDE / Editor ───────────────────────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.sw?
+
+# ── Firebase service account keys ─────────────────────────────────────────────
+*-service-account*.json
+serviceAccountKey*.json
+*-adminsdk-*.json
