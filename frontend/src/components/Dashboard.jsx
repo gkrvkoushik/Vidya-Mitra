@@ -1,6 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { uploadResumeToCloudinary } from '../resumeUpload.js';
 import { downloadResume } from '../resumeDownload.js';
+import ResumeAnalysis from './ResumeAnalysis.jsx';
+import { getDashboardData, sendChatMessage } from '../api.js';
+import CareerPaths from './CareerPaths.jsx';
+import Roadmap from './Roadmap.jsx';
+import Quiz from './Quiz.jsx';
+import Progress from './Progress.jsx';
+import Achievements from './Achievements.jsx';
+import MockInterview from './MockInterview.jsx';
 
 // Custom SVG Icons for Dashboard
 function BellIcon() {
@@ -38,23 +46,25 @@ function ArrowRightIcon() {
   );
 }
 
-function HexagonGoldBadge() {
+function DynamicBadge({ level }) {
+  const colors = {
+    Bronze: { primary: '#CD7F32', secondary: '#8B4513' },
+    Silver: { primary: '#C0C0C0', secondary: '#808080' },
+    Gold: { primary: '#FFD700', secondary: '#DAA520' },
+    Platinum: { primary: '#E5E4E2', secondary: '#71706E' }
+  };
+  
+  const color = colors[level] || colors.Gold;
+  
   return (
-    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" style={{ filter: 'drop-shadow(0 2px 4px rgba(245, 158, 11, 0.2))' }}>
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" style={{ filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2))' }}>
       <path
         d="M12 2l8.66 5v10L12 22l-8.66-5V7L12 2z"
-        fill="url(#goldHexGrad)"
-        stroke="var(--color-dash-gold)"
+        fill={color.primary}
+        stroke={color.secondary}
         strokeWidth="1.5"
       />
-      {/* Star Icon in center */}
       <polygon points="12 7.5 13.5 10.5 17 11 14.5 13.5 15 17 12 15 9 17 9.5 13.5 7 11 10.5 10.5" fill="#FFFFFF" />
-      <defs>
-        <linearGradient id="goldHexGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#FBBF24" />
-          <stop offset="100%" stopColor="#F59E0B" />
-        </linearGradient>
-      </defs>
     </svg>
   );
 }
@@ -134,6 +144,9 @@ export default function Dashboard({ user, firebaseUser, theme, setTheme, onLogou
   const [activeMenu, setActiveMenu] = useState('Dashboard');
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef(null);
+  const [notifications, setNotifications] = useState([]);
 
   const getFileName = (url) => {
     if (!url) return 'Koushik_Resume.pdf';
@@ -262,78 +275,128 @@ export default function Dashboard({ user, firebaseUser, theme, setTheme, onLogou
     }
   };
 
-  // Timeline list state (Interactive checking nodes)
-  const [roadmapSteps, setRoadmapSteps] = useState([
-    { id: 1, title: 'Python Fundamentals', desc: 'Syntax, data structures, and OOP', completed: true, icon: '🐍' },
-    { id: 2, title: 'Statistics & Probability', desc: 'Distributions, hypothesis testing', completed: true, icon: '📊' },
-    { id: 3, title: 'Machine Learning Basics', desc: 'Linear models, trees, decision logic', completed: false, icon: '🤖' },
-    { id: 4, title: 'Deep Learning Systems', desc: 'Neural nets, backprop, transformers', completed: false, icon: '🌐' }
-  ]);
+  // Live dashboard data from Firestore
+  const [dashData, setDashData] = useState({
+    ats_score: 0,
+    match_percentage: 0,
+    profile_completion: 0,
+    total_points: 0,
+    badge_level: 'Bronze',
+    roadmap_progress: 0,
+    active_roadmap: null,
+    recent_activities: [],
+    skills_overview: [],
+    has_analysis: false,
+    has_roadmaps: false
+  });
+  const [dashDataLoading, setDashDataLoading] = useState(true);
 
-  // Points starting state (Calculated dynamically)
-  const [basePoints, setBasePoints] = useState(780);
+  const refreshDashboardData = async () => {
+    if (firebaseUser?.uid) {
+      setDashDataLoading(true);
+      try {
+        const data = await getDashboardData(firebaseUser.uid);
+        setDashData(data);
+      } catch (error) {
+        console.error('Failed to refresh dashboard data:', error);
+      } finally {
+        setDashDataLoading(false);
+      }
+    }
+  };
 
-  // Chat log states (Interactive AI Assistant Console)
+  useEffect(() => {
+    const uid = firebaseUser?.uid;
+    if (!uid) { setDashDataLoading(false); return; }
+    getDashboardData(uid).then((data) => {
+      setDashData(data);
+      setDashDataLoading(false);
+    }).catch(() => {
+      setDashDataLoading(false);
+    });
+  }, [firebaseUser]);
+
+  // Sync notifications from dashboard activities
+  useEffect(() => {
+    if (!dashData.recent_activities?.length) return;
+    setNotifications(prev => {
+      const readSet = new Set(prev.filter(n => n.read).map(n => n.text));
+      return dashData.recent_activities.map(a => ({
+        icon: a.icon,
+        text: a.text,
+        time: a.time,
+        read: readSet.has(a.text),
+      }));
+    });
+  }, [dashData.recent_activities]);
+
+  const markRead = (i) => setNotifications(prev => prev.map((n, idx) => idx === i ? { ...n, read: true } : n));
+  const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+
+  // Close notification panel on outside click
+  useEffect(() => {
+    const handler = (e) => { if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Live roadmap state from dashboard data
+  const [dashRoadmap, setDashRoadmap] = useState({ weeks: [], completed: [], progress: 0, role: '' });
+  
+  useEffect(() => {
+    if (dashData.active_roadmap) {
+      setDashRoadmap({
+        weeks: dashData.active_roadmap.roadmap || [],
+        completed: [],
+        progress: dashData.active_roadmap.progress || 0,
+        role: dashData.active_roadmap.role || ''
+      });
+    }
+  }, [dashData]);
+
+  // Floating chat state
+  const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [chatLogs, setChatLogs] = useState([
-    { sender: 'agent', message: `I've analyzed your progress, ${user.name}. Your Python foundation is strong, but you have minor gaps in statistical sampling. Let's finish the Machine Learning Basics roadmap next!` }
+    { role: 'assistant', content: `Hi ${user.name}! I'm Vidya, your AI career mentor. I know your skills and progress — ask me anything!` }
   ]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatEndRef = useRef(null);
 
-  // Handle roadmap step completion toggles
-  const handleToggleStep = (id) => {
-    const updated = roadmapSteps.map((step) => {
-      if (step.id === id) {
-        // adjust points dynamically (+100 XP when completed, -100 XP when unchecked)
-        const diff = step.completed ? -100 : 100;
-        setBasePoints((prev) => Math.max(0, prev + diff));
-        return { ...step, completed: !step.completed };
-      }
-      return step;
-    });
-    setRoadmapSteps(updated);
-  };
+  useEffect(() => {
+    if (chatOpen) chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatLogs, chatOpen]);
 
-  // Compute stats
-  const completedSteps = roadmapSteps.filter((s) => s.completed).length;
-  const roadmapProgressPct = Math.round((completedSteps / roadmapSteps.length) * 100);
+  const getSkillsContext = () => ({
+    skills: (dashData.skills_overview || []).map(s => s.name),
+    ats_score: dashData.ats_score,
+    badge_level: dashData.badge_level,
+    total_points: dashData.total_points,
+    active_role: dashRoadmap.role,
+    roadmap_progress: dashRoadmap.progress,
+    missing_skills: dashData.active_roadmap ? [] : [],
+  });
 
-  // Handle Chat submit
-  const handleChatSend = (e) => {
+  const handleChatSend = async (e) => {
     e.preventDefault();
-    if (!chatInput.trim()) return;
-
-    const userMessage = chatInput.trim();
-    const newLogs = [...chatLogs, { sender: 'user', message: userMessage }];
-    setChatLogs(newLogs);
+    if (!chatInput.trim() || chatLoading) return;
+    const userMsg = chatInput.trim();
     setChatInput('');
-
-    // AI dynamic responses depending on message keywords
-    setTimeout(() => {
-      let botResponse = `Interesting question! Let's check your skill gaps. I suggest finishing the Statistics milestone to raise your ATS score.`;
-      
-      const lowerMsg = userMessage.toLowerCase();
-      if (lowerMsg.includes('ats') || lowerMsg.includes('resume')) {
-        botResponse = `Your ATS score is currently 82/100, which is top tier! Uploading your updated Python certifications will push it to 85+.`;
-      } else if (lowerMsg.includes('roadmap') || lowerMsg.includes('learn')) {
-        botResponse = `You are on track in your 'AI Engineer' roadmap. Currently ${roadmapProgressPct}% complete. Next up is: ${roadmapSteps.find(s => !s.completed)?.title || 'completed roadmap!'}`;
-      } else if (lowerMsg.includes('badge') || lowerMsg.includes('xp') || lowerMsg.includes('gold')) {
-        botResponse = `You have ${basePoints} Points. You need ${1000 - basePoints} more points to reach the Platinum tier badge level!`;
-      } else if (lowerMsg.includes('hi') || lowerMsg.includes('hello')) {
-        botResponse = `Hello ${user.name}! I'm your AI career mentor. How can I help you level up your career today?`;
-      }
-
-      setChatLogs((prev) => [...prev, { sender: 'agent', message: botResponse }]);
-    }, 800);
+    setChatLogs(prev => [...prev, { role: 'user', content: userMsg }]);
+    setChatLoading(true);
+    try {
+      const history = chatLogs.map(m => ({ role: m.role, content: m.content }));
+      const data = await sendChatMessage(firebaseUser?.uid || '', userMsg, history, getSkillsContext());
+      setChatLogs(prev => [...prev, { role: 'assistant', content: data.reply }]);
+    } catch {
+      setChatLogs(prev => [...prev, { role: 'assistant', content: 'Sorry, I had trouble responding. Please try again.' }]);
+    } finally {
+      setChatLoading(false);
+    }
   };
 
-  // Preset list of skills (will filter with search bar)
-  const skillsData = [
-    { name: 'Python', percent: 90, color: 'var(--color-dash-blue)' },
-    { name: 'Machine Learning', percent: 65, color: 'var(--color-dash-purple)' },
-    { name: 'SQL', percent: 80, color: 'var(--color-dash-blue)' },
-    { name: 'Data Structures', percent: 75, color: 'var(--color-dash-blue)' },
-    { name: 'System Design', percent: 50, color: 'var(--color-dash-purple)' }
-  ];
+  // Dynamic skills data from dashboard API
+  const skillsData = dashData.skills_overview || [];
 
   // Filtering skills list via search input
   const filteredSkills = skillsData.filter((skill) =>
@@ -370,13 +433,16 @@ export default function Dashboard({ user, firebaseUser, theme, setTheme, onLogou
               { name: 'Quizzes', icon: 'Quizzes' },
               { name: 'Progress', icon: 'Progress' },
               { name: 'Achievements', icon: 'Achievements' },
-              { name: 'Mock Interview', icon: 'MockInterview', soon: true },
+              { name: 'Mock Interview', icon: 'MockInterview' },
               { name: 'Settings', icon: 'Settings' }
             ].map((menuItem) => (
               <li key={menuItem.name}>
                 <button
                   className={`dash-nav-btn ${activeMenu === menuItem.name ? 'active' : ''}`}
-                  onClick={() => setActiveMenu(menuItem.name)}
+                  onClick={() => {
+                    setActiveMenu(menuItem.name);
+                    if (menuItem.name === 'Dashboard') refreshDashboardData();
+                  }}
                 >
                   <SidebarIcon name={menuItem.icon} />
                   {menuItem.name}
@@ -545,9 +611,55 @@ export default function Dashboard({ user, firebaseUser, theme, setTheme, onLogou
             </button>
 
             {/* Notifications Bell */}
-            <div className="dash-control-btn">
-              <BellIcon />
-              <span className="notification-badge-red">3</span>
+            <div style={{ position: 'relative' }} ref={notifRef}>
+              <button
+                className="dash-control-btn"
+                onClick={() => setNotifOpen(o => !o)}
+                style={{ position: 'relative' }}
+              >
+                <BellIcon />
+                {notifications.filter(n => !n.read).length > 0 && (
+                  <span className="notification-badge-red">
+                    {notifications.filter(n => !n.read).length}
+                  </span>
+                )}
+              </button>
+              {notifOpen && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 200,
+                  width: 300, background: 'var(--color-dash-card)',
+                  border: '1px solid var(--color-dash-border)', borderRadius: 12,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.18)', overflow: 'hidden',
+                }}>
+                  <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--color-dash-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.88rem' }}>Notifications</span>
+                    {notifications.some(n => !n.read) && (
+                      <button onClick={markAllRead} style={{ fontSize: '0.7rem', color: 'var(--color-dash-purple)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+                    {notifications.length === 0 ? (
+                      <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-dash-text-muted)', fontSize: '0.82rem' }}>No notifications</div>
+                    ) : notifications.map((n, i) => (
+                      <div key={i} onClick={() => markRead(i)} style={{
+                        padding: '0.7rem 1rem', display: 'flex', gap: '0.65rem', alignItems: 'flex-start',
+                        background: n.read ? 'transparent' : 'rgba(138,85,255,0.06)',
+                        borderBottom: '1px solid var(--color-dash-border)', cursor: 'pointer',
+                        transition: 'background 0.15s',
+                      }}>
+                        <span style={{ fontSize: '1.1rem', flexShrink: 0, marginTop: 1 }}>{n.icon}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--color-dash-text)', fontWeight: n.read ? 400 : 600, lineHeight: 1.35 }}>{n.text}</div>
+                          <div style={{ fontSize: '0.68rem', color: 'var(--color-dash-text-muted)', marginTop: 2 }}>{n.time}</div>
+                        </div>
+                        {!n.read && <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--color-dash-purple)', flexShrink: 0, marginTop: 5 }} />}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Profile image with dropdown */}
@@ -590,16 +702,21 @@ export default function Dashboard({ user, firebaseUser, theme, setTheme, onLogou
                 <span className="dash-kpi-title">ATS Score</span>
                 <div className="dash-kpi-content-row">
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span className="dash-kpi-value-huge">82/100</span>
+                    {dashDataLoading ? (
+                      <span className="dash-kpi-value-huge" style={{ color: 'var(--color-dash-text-muted)' }}>—</span>
+                    ) : (
+                      <span className="dash-kpi-value-huge">{dashData.ats_score}/100</span>
+                    )}
                     <span className="dash-kpi-indicator-trend">
-                      <ArrowUpIcon /> 18% from last analysis
+                      <ArrowUpIcon />
+                      {dashDataLoading ? 'Loading...' : dashData.has_analysis ? `${dashData.match_percentage}% match` : 'No analysis yet'}
                     </span>
                   </div>
                   {/* Circular ring chart */}
                   <div style={{ width: '48px', height: '48px', position: 'relative' }}>
                     <svg viewBox="0 0 36 36" style={{ transform: 'rotate(-90deg)', width: '48px', height: '48px' }}>
                       <circle cx="18" cy="18" r="15" fill="none" stroke="var(--color-dash-border)" strokeWidth="4.5" />
-                      <circle cx="18" cy="18" r="15" fill="none" stroke="var(--color-dash-purple)" strokeWidth="4.5" strokeDasharray="94.2" strokeDashoffset="17" strokeLinecap="round" />
+                      <circle cx="18" cy="18" r="15" fill="none" stroke="var(--color-dash-purple)" strokeWidth="4.5" strokeDasharray="94.2" strokeDashoffset={94.2 - (dashData.ats_score / 100) * 94.2} strokeLinecap="round" />
                     </svg>
                   </div>
                 </div>
@@ -610,15 +727,19 @@ export default function Dashboard({ user, firebaseUser, theme, setTheme, onLogou
                 <span className="dash-kpi-title">Current Badge</span>
                 <div className="dash-kpi-content-row" style={{ marginTop: '0.4rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                    <HexagonGoldBadge />
+                    <DynamicBadge level={dashData.badge_level} />
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <span className="dash-kpi-value-huge" style={{ fontSize: '1.25rem' }}>Gold</span>
-                      <span className="dash-kpi-indicator-muted" style={{ fontSize: '0.7rem' }}>{basePoints} / 1000 Points</span>
+                      <span className="dash-kpi-value-huge" style={{ fontSize: '1.25rem' }}>
+                        {dashDataLoading ? '—' : dashData.badge_level}
+                      </span>
+                      <span className="dash-kpi-indicator-muted" style={{ fontSize: '0.7rem' }}>
+                        {dashDataLoading ? '' : `${dashData.total_points} pts`}
+                      </span>
                     </div>
                   </div>
                 </div>
                 <div className="skills-progressbar-base" style={{ marginTop: '0.5rem', height: '5px' }}>
-                  <div className="skills-progressbar-fill" style={{ width: `${(basePoints / 1000) * 100}%`, backgroundColor: 'var(--color-dash-purple)' }}></div>
+                  <div className="skills-progressbar-fill" style={{ width: `${Math.min((dashData.total_points / 2500) * 100, 100)}%`, backgroundColor: 'var(--color-dash-purple)' }}></div>
                 </div>
               </div>
 
@@ -626,10 +747,12 @@ export default function Dashboard({ user, firebaseUser, theme, setTheme, onLogou
               <div className="dash-kpi-card">
                 <span className="dash-kpi-title">Profile Completion</span>
                 <div className="dash-kpi-content-row" style={{ alignItems: 'flex-start' }}>
-                  <span className="dash-kpi-value-huge">80%</span>
+                  <span className="dash-kpi-value-huge">
+                    {dashDataLoading ? '—' : `${dashData.profile_completion}%`}
+                  </span>
                 </div>
                 <div className="skills-progressbar-base" style={{ height: '5px', marginTop: '0.2rem' }}>
-                  <div className="skills-progressbar-fill" style={{ width: '80%', backgroundColor: 'var(--color-dash-blue)' }}></div>
+                  <div className="skills-progressbar-fill" style={{ width: `${dashData.profile_completion}%`, backgroundColor: 'var(--color-dash-blue)' }}></div>
                 </div>
                 <a href="#complete-profile" className="dash-link-action" style={{ fontSize: '0.72rem', marginTop: '0.5rem' }}>
                   Complete your profile <ArrowRightIcon />
@@ -641,18 +764,17 @@ export default function Dashboard({ user, firebaseUser, theme, setTheme, onLogou
                 <span className="dash-kpi-title">Total Points</span>
                 <div className="dash-kpi-content-row" style={{ zIndex: 2 }}>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span className="dash-kpi-value-huge">{basePoints}</span>
-                    <span className="dash-kpi-indicator-muted" style={{ fontSize: '0.68rem', marginTop: '2px' }}>Keep learning to level up!</span>
+                    <span className="dash-kpi-value-huge">
+                      {dashDataLoading ? '—' : dashData.total_points}
+                    </span>
+                    <span className="dash-kpi-indicator-muted" style={{ fontSize: '0.68rem', marginTop: '2px' }}>
+                      {dashDataLoading ? '' : dashData.total_points === 0 ? 'Take a quiz to earn points!' : 'Keep learning to level up!'}
+                    </span>
                   </div>
                 </div>
-                
-                {/* Dynamic filled purple area chart */}
                 <div className="points-chart-wrapper">
                   <svg width="100%" height="100%" viewBox="0 0 100 50" preserveAspectRatio="none">
-                    <path 
-                      d="M0 45 C15 42, 30 35, 45 32 C60 28, 75 15, 100 8 L100 50 L0 50 Z" 
-                      className="points-area-path"
-                    />
+                    <path d="M0 45 C15 42, 30 35, 45 32 C60 28, 75 15, 100 8 L100 50 L0 50 Z" className="points-area-path" />
                   </svg>
                 </div>
               </div>
@@ -662,43 +784,45 @@ export default function Dashboard({ user, firebaseUser, theme, setTheme, onLogou
             {/* Row 2: Main Progress */}
             <div className="dash-row-progress">
               
-              {/* Roadmap Progress Card */}
+                            {/* Roadmap Progress Card */}
               <div className="dash-section-card">
                 <span className="dash-kpi-title">Roadmap Progress</span>
-                <h3 className="dash-section-card-title">AI Engineer Roadmap</h3>
-                <span className="dash-section-card-subtitle">{roadmapProgressPct}% Completed ({completedSteps} of {roadmapSteps.length} milestones)</span>
+                <h3 className="dash-section-card-title">{dashRoadmap.role || 'AI Engineer'} Roadmap</h3>
+                <span className="dash-section-card-subtitle">{dashRoadmap.progress}% Completed ({dashRoadmap.completed.length} of {dashRoadmap.weeks.length} milestones)</span>
 
-                {/* Timeline nodes */}
-                <div className="timeline-flex-wrapper">
-                  <div className="roadmap-horizontal-timeline">
-                    {roadmapSteps.map((step) => (
-                      <div 
-                        key={step.id} 
-                        className={`timeline-step-node ${step.completed ? 'completed' : ''} ${step.id === completedSteps + 1 ? 'active' : ''}`}
-                        onClick={() => handleToggleStep(step.id)}
-                        title={`Click to toggle ${step.title}`}
-                      >
-                        <div className="timeline-step-circle">
-                          {step.completed ? '✓' : step.icon}
-                        </div>
-                        <span className="timeline-step-label">{step.title}</span>
-                      </div>
-                    ))}
+                {dashDataLoading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '1rem 0', color: 'var(--color-dash-text-muted)', fontSize: '0.8rem' }}>
+                    <span className="spinner" style={{ borderColor: 'rgba(138,85,255,0.3)', borderTopColor: 'var(--color-dash-purple)', width: 16, height: 16, borderWidth: 2 }} />
+                    Generating roadmap...
                   </div>
-                </div>
+                ) : (
+                  <div className="timeline-flex-wrapper">
+                    <div className="roadmap-horizontal-timeline">
+                      {dashRoadmap.weeks.map((week, idx) => {
+                        const topic = week.topic || week.title || '';
+                        const isDone = dashRoadmap.completed.includes(topic);
+                        const isActive = !isDone && dashRoadmap.weeks.findIndex(w => !dashRoadmap.completed.includes(w.topic || w.title || '')) === idx;
+                        return (
+                          <div key={idx} className={`timeline-step-node ${isDone ? 'completed' : ''} ${isActive ? 'active' : ''}`}>
+                            <div className="timeline-step-circle">{isDone ? '✓' : `W${week.week || idx + 1}`}</div>
+                            <span className="timeline-step-label">{topic}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
-                {/* Action bar bottom */}
                 <div className="timeline-bottom-controls">
-                  <a href="#roadmap-full" className="dash-link-action">
+                  <button className="dash-link-action" style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit' }}
+                    onClick={() => setActiveMenu('Roadmaps')}>
                     View Roadmap <ArrowRightIcon />
-                  </a>
+                  </button>
                   <div className="timeline-dots-wrapper">
-                    {roadmapSteps.map((s) => (
-                      <span 
-                        key={s.id} 
-                        className={`timeline-dot-indicator ${s.completed ? 'active' : ''}`}
-                      ></span>
-                    ))}
+                    {dashRoadmap.weeks.map((w, i) => {
+                      const t = w.topic || w.title || '';
+                      return <span key={i} className={`timeline-dot-indicator ${dashRoadmap.completed.includes(t) ? 'active' : ''}`} />;
+                    })}
                   </div>
                 </div>
               </div>
@@ -707,24 +831,27 @@ export default function Dashboard({ user, firebaseUser, theme, setTheme, onLogou
               <div className="dash-section-card">
                 <span className="dash-kpi-title">Next Recommended Step</span>
                 <div className="recommended-next-step-content" style={{ marginTop: '0.75rem' }}>
-                  <div className="rec-step-desc-wrapper">
-                    <span className="rec-step-sublabel">Continue learning</span>
-                    <h4 className="rec-step-headline">Machine Learning Basics</h4>
-                    <span className="rec-step-week">Week 3 of 12</span>
-                  </div>
-
-                  {/* 3D isometric vector flag graphic */}
-                  <div className="rec-isometric-illustration-container">
-                    <IsometricBlockSVG />
-                  </div>
-
-                  <button 
-                    className="btn btn-primary" 
-                    style={{ width: '100%', borderRadius: '10px' }}
-                    onClick={() => handleToggleStep(3)}
-                  >
-                    Continue Roadmap
-                  </button>
+                  {(() => {
+                    const next = dashRoadmap.weeks.find(w => !dashRoadmap.completed.includes(w.topic || w.title || ''));
+                    return next ? (
+                      <>
+                        <div className="rec-step-desc-wrapper">
+                          <span className="rec-step-sublabel">Continue learning</span>
+                          <h4 className="rec-step-headline">{next.topic || next.title}</h4>
+                          <span className="rec-step-week">Week {next.week || dashRoadmap.weeks.indexOf(next) + 1}</span>
+                        </div>
+                        <div className="rec-isometric-illustration-container"><IsometricBlockSVG /></div>
+                        <button className="btn btn-primary" style={{ width: '100%', borderRadius: '10px' }}
+                          onClick={() => setActiveMenu('Roadmaps')}>
+                          Continue Roadmap
+                        </button>
+                      </>
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--color-dash-text-muted)', fontSize: '0.82rem' }}>
+                        {dashDataLoading ? 'Loading...' : '🎉 All steps complete! Go to Roadmaps to generate more.'}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -737,12 +864,7 @@ export default function Dashboard({ user, firebaseUser, theme, setTheme, onLogou
               <div className="dash-section-card">
                 <span className="dash-kpi-title">Recent Activity</span>
                 <div className="activity-list-container" style={{ marginTop: '1rem' }}>
-                  {[
-                    { text: 'Resume parsed successfully', time: '10 mins ago', icon: '📄' },
-                    { text: 'Skill gaps identified', time: '1 hr ago', icon: '🔍' },
-                    { text: 'Career paths generated', time: '4 hrs ago', icon: '🛣️' },
-                    { text: 'Roadmap created: AI Engineer', time: '1 day ago', icon: '📅' }
-                  ].map((act, index) => (
+                  {dashData.recent_activities.map((act, index) => (
                     <div className="activity-list-node" key={index}>
                       <div className="activity-node-icon-wrapper">
                         {act.icon}
@@ -792,49 +914,26 @@ export default function Dashboard({ user, firebaseUser, theme, setTheme, onLogou
                 </a>
               </div>
 
-              {/* Agent Activity Card */}
+              {/* Quick Tips Card (replaces Agent Activity) */}
               <div className="dash-section-card">
-                <span className="dash-kpi-title">Agent Activity</span>
-                
-                <div className="agent-mentor-console" style={{ marginTop: '1rem' }}>
-                  {/* Agent Header */}
-                  <div className="agent-profile-summary">
-                    <div className="agent-avatar-circle">
-                      <AgentAvatarSVG />
+                <span className="dash-kpi-title">Quick Tips</span>
+                <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {[
+                    { icon: '🎯', text: `ATS Score ${dashData.ats_score}/100 — ${dashData.ats_score >= 80 ? 'Great job! Keep it up.' : 'Upload your resume for analysis.'}` },
+                    { icon: '📍', text: dashRoadmap.role ? `${dashRoadmap.progress}% done on ${dashRoadmap.role} roadmap.` : 'Start a career roadmap to track progress.' },
+                    { icon: '🏅', text: `${dashData.badge_level} badge · ${dashData.total_points} pts earned so far.` },
+                  ].map((tip, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', padding: '0.65rem 0.75rem', borderRadius: '10px', background: 'var(--color-dash-bg)', fontSize: '0.8rem', color: 'var(--color-dash-text)' }}>
+                      <span style={{ fontSize: '1rem' }}>{tip.icon}</span>
+                      <span>{tip.text}</span>
                     </div>
-                    <div>
-                      <h4 className="agent-name-text">AI Career Coach</h4>
-                      <span className="agent-status-label">● Active</span>
-                    </div>
-                  </div>
-
-                  {/* Chat Log history */}
-                  <div className="agent-chat-logs">
-                    {chatLogs.map((msg, index) => (
-                      <div key={index} className={`agent-chat-msg ${msg.sender}`}>
-                        {msg.message}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Console chat input form */}
-                  <form onSubmit={handleChatSend}>
-                    <div className="agent-console-input-wrapper">
-                      <input 
-                        type="text" 
-                        className="agent-console-input" 
-                        placeholder="Ask AI Mentor..."
-                        value={chatInput}
-                        onChange={(e) => setChatInput(e.target.value)}
-                      />
-                      <button type="submit" className="agent-console-send-btn">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <line x1="22" y1="2" x2="11" y2="13" />
-                          <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                        </svg>
-                      </button>
-                    </div>
-                  </form>
+                  ))}
+                  <button
+                    onClick={() => setChatOpen(true)}
+                    style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--color-dash-purple)', color: '#fff', border: 'none', borderRadius: '10px', padding: '0.6rem 1rem', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', width: '100%', justifyContent: 'center' }}
+                  >
+                    <AgentAvatarSVG /> Chat with Vidya AI
+                  </button>
                 </div>
               </div>
 
@@ -844,6 +943,12 @@ export default function Dashboard({ user, firebaseUser, theme, setTheme, onLogou
         )}
 
         {activeMenu === 'Resume Analysis' && (
+          <div className="resume-analysis-container">
+            <ResumeAnalysis user={user} firebaseUser={firebaseUser} />
+          </div>
+        )}
+
+        {false && activeMenu === 'Resume Analysis' && (
           <div className="resume-analysis-container">
             {uploadError && (
               <div className="resume-card" style={{ padding: '0.75rem 1.25rem', borderColor: 'var(--color-dash-red)', color: 'var(--color-dash-red)', fontWeight: '600', fontSize: '0.82rem', marginBottom: '0.5rem', backgroundColor: 'var(--color-tag-danger-bg)' }}>
@@ -1225,20 +1330,299 @@ export default function Dashboard({ user, firebaseUser, theme, setTheme, onLogou
           </div>
         )}
 
-        {activeMenu !== 'Dashboard' && activeMenu !== 'Resume Analysis' && (
+        {activeMenu === 'Career Paths' && (
+          <div className="resume-analysis-container">
+            <CareerPaths user={user} firebaseUser={firebaseUser}
+              onRoleSelected={(role) => {
+                // optionally update user context
+              }} />
+          </div>
+        )}
+
+        {activeMenu === 'Roadmaps' && (
+          <div className="resume-analysis-container">
+            <Roadmap user={user} firebaseUser={firebaseUser} />
+          </div>
+        )}
+
+        {activeMenu === 'Quizzes' && (
+          <div className="resume-analysis-container">
+            <Quiz user={user} firebaseUser={firebaseUser} />
+          </div>
+        )}
+
+        {activeMenu === 'Progress' && (
+          <div className="resume-analysis-container">
+            <Progress user={user} firebaseUser={firebaseUser} />
+          </div>
+        )}
+
+        {activeMenu === 'Achievements' && (
+          <div className="resume-analysis-container">
+            <Achievements user={user} firebaseUser={firebaseUser} />
+          </div>
+        )}
+
+        {activeMenu === 'Mock Interview' && (
+          <div className="resume-analysis-container">
+            <MockInterview user={user} firebaseUser={firebaseUser} />
+          </div>
+        )}
+
+        {activeMenu === 'Settings' && (
+          <div className="resume-analysis-container">
+            <Settings user={user} firebaseUser={firebaseUser} theme={theme} setTheme={setTheme} onEditProfile={onEditProfile} onLogout={onLogout} onUserUpdate={onUserUpdate} />
+          </div>
+        )}
+
+        {activeMenu !== 'Dashboard' && activeMenu !== 'Resume Analysis' &&
+         activeMenu !== 'Career Paths' && activeMenu !== 'Roadmaps' &&
+         activeMenu !== 'Quizzes' && activeMenu !== 'Progress' && activeMenu !== 'Achievements' &&
+         activeMenu !== 'Mock Interview' && activeMenu !== 'Settings' && (
           <div className="resume-card" style={{ padding: '4rem 2rem', textAlign: 'center', justifyContent: 'center', alignItems: 'center' }}>
-            <div className="overview-icon-container" style={{ width: '60px', height: '60px', borderRadius: '15px', marginBottom: '1.5rem', fontSize: '1.8rem' }}>
-              🛠️
-            </div>
-            <h3 style={{ fontSize: '1.35rem', fontWeight: 800, marginBottom: '0.5rem', color: 'var(--color-dash-text)' }}>{activeMenu} Page</h3>
+            <div className="overview-icon-container" style={{ width: '60px', height: '60px', borderRadius: '15px', marginBottom: '1.5rem', fontSize: '1.8rem' }}>🛠️</div>
+            <h3 style={{ fontSize: '1.35rem', fontWeight: 800, marginBottom: '0.5rem' }}>{activeMenu}</h3>
             <p style={{ color: 'var(--color-dash-text-muted)', fontSize: '0.88rem', maxWidth: '380px', lineHeight: 1.5 }}>
-              Our AI Career Mentor team is building advanced mentoring modules for {activeMenu}. Check back soon!
+              Coming soon! Our team is building this module.
             </p>
           </div>
         )}
 
       </main>
 
+      {/* Floating Chat Button */}
+      <button
+        onClick={() => setChatOpen(o => !o)}
+        style={{
+          position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 1000,
+          width: '56px', height: '56px', borderRadius: '50%',
+          background: 'var(--color-dash-purple)', color: '#fff',
+          border: 'none', cursor: 'pointer', boxShadow: '0 4px 20px rgba(126,70,240,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'transform 0.2s',
+        }}
+        title="Chat with Vidya AI"
+      >
+        {chatOpen ? (
+          <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        ) : (
+          <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+        )}
+      </button>
+
+      {/* Chat Popup */}
+      {chatOpen && (
+        <div style={{
+          position: 'fixed', bottom: '5.5rem', right: '2rem', zIndex: 1000,
+          width: '340px', maxHeight: '480px',
+          background: 'var(--color-dash-card)', borderRadius: '16px',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column',
+          border: '1px solid var(--color-dash-border)', overflow: 'hidden',
+        }}>
+          {/* Header */}
+          <div style={{ padding: '0.85rem 1rem', background: 'var(--color-dash-purple)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '50%', padding: '5px', display: 'flex' }}>
+              <AgentAvatarSVG />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ color: '#fff', fontWeight: 700, fontSize: '0.88rem' }}>Vidya AI Mentor</div>
+              <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.7rem' }}>● Personalised to your profile</div>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '300px' }}>
+            {chatLogs.map((msg, i) => (
+              <div key={i} style={{
+                alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                background: msg.role === 'user' ? 'var(--color-dash-purple)' : 'var(--color-dash-bg)',
+                color: msg.role === 'user' ? '#fff' : 'var(--color-dash-text)',
+                borderRadius: msg.role === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
+                padding: '0.5rem 0.75rem', fontSize: '0.8rem', maxWidth: '85%', lineHeight: 1.4,
+              }}>
+                {msg.content}
+              </div>
+            ))}
+            {chatLoading && (
+              <div style={{ alignSelf: 'flex-start', color: 'var(--color-dash-text-muted)', fontSize: '0.78rem', padding: '0.4rem 0.6rem' }}>
+                Vidya is typing...
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Input */}
+          <form onSubmit={handleChatSend} style={{ padding: '0.6rem', borderTop: '1px solid var(--color-dash-border)', display: 'flex', gap: '0.4rem' }}>
+            <input
+              type="text"
+              value={chatInput}
+              onChange={e => setChatInput(e.target.value)}
+              placeholder="Ask Vidya anything..."
+              disabled={chatLoading}
+              style={{
+                flex: 1, background: 'var(--color-dash-bg)', border: '1px solid var(--color-dash-border)',
+                borderRadius: '8px', padding: '0.45rem 0.75rem', fontSize: '0.8rem',
+                color: 'var(--color-dash-text)', outline: 'none',
+              }}
+            />
+            <button type="submit" disabled={chatLoading}
+              style={{ background: 'var(--color-dash-purple)', border: 'none', borderRadius: '8px', padding: '0 0.75rem', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </button>
+          </form>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+// Settings Component
+function Settings({ user, firebaseUser, theme, setTheme, onEditProfile, onLogout, onUserUpdate }) {
+  const [saved, setSaved] = useState(false);
+  const [notifications, setNotifications] = useState({ quizReminders: true, roadmapUpdates: true, achievements: true, weeklyDigest: false });
+  const [privacy, setPrivacy] = useState({ showProfile: true, showProgress: false });
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+
+  const handleSaveNotifications = () => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const Section = ({ title, children }) => (
+    <div style={{ background: 'var(--color-dash-card)', border: '1px solid var(--color-dash-border)', borderRadius: 14, padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--color-dash-text)', paddingBottom: '0.75rem', borderBottom: '1px solid var(--color-dash-border)' }}>{title}</div>
+      {children}
+    </div>
+  );
+
+  const Toggle = ({ label, desc, checked, onChange }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
+      <div>
+        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-dash-text)' }}>{label}</div>
+        {desc && <div style={{ fontSize: '0.72rem', color: 'var(--color-dash-text-muted)', marginTop: 2 }}>{desc}</div>}
+      </div>
+      <button
+        onClick={() => onChange(!checked)}
+        style={{
+          width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', flexShrink: 0,
+          background: checked ? 'var(--color-dash-purple)' : 'var(--color-dash-border)',
+          position: 'relative', transition: 'background 0.2s',
+        }}
+      >
+        <span style={{
+          position: 'absolute', top: 3, left: checked ? 23 : 3,
+          width: 18, height: 18, borderRadius: '50%', background: '#fff',
+          transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+        }} />
+      </button>
+    </div>
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: 720 }}>
+      <div>
+        <h2 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '0.25rem' }}>Settings</h2>
+        <p style={{ fontSize: '0.8rem', color: 'var(--color-dash-text-muted)' }}>Manage your account preferences and app settings</p>
+      </div>
+
+      {/* Profile Settings */}
+      <Section title="👤 Profile">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <img src={user.avatar} alt={user.name} style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--color-dash-border)' }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>{user.name}</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--color-dash-text-muted)' }}>{user.email}</div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--color-dash-text-muted)', marginTop: 2 }}>{user.college}{user.graduation_year ? ` · Class of ${user.graduation_year}` : ''}</div>
+          </div>
+          <button className="edit-save-btn" onClick={onEditProfile} style={{ padding: '0.45rem 1.1rem', fontSize: '0.8rem' }}>Edit Profile</button>
+        </div>
+      </Section>
+
+      {/* Appearance */}
+      <Section title="🎨 Appearance">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Theme</div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--color-dash-text-muted)', marginTop: 2 }}>Choose your preferred colour scheme</div>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {['dark', 'light'].map(t => (
+              <button key={t} onClick={() => setTheme(t)} style={{
+                padding: '0.4rem 1rem', borderRadius: 20, fontSize: '0.78rem', fontWeight: 700,
+                border: `2px solid ${theme === t ? 'var(--color-dash-purple)' : 'var(--color-dash-border)'}`,
+                background: theme === t ? 'var(--color-dash-purple)' : 'transparent',
+                color: theme === t ? '#fff' : 'var(--color-dash-text-muted)',
+                cursor: 'pointer', textTransform: 'capitalize', fontFamily: 'inherit',
+              }}>
+                {t === 'dark' ? '🌙 Dark' : '☀️ Light'}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Section>
+
+      {/* Notifications */}
+      <Section title="🔔 Notifications">
+        <Toggle label="Quiz Reminders" desc="Get reminded to complete your daily quiz" checked={notifications.quizReminders} onChange={v => setNotifications(p => ({ ...p, quizReminders: v }))} />
+        <Toggle label="Roadmap Updates" desc="Notifications when a new week becomes available" checked={notifications.roadmapUpdates} onChange={v => setNotifications(p => ({ ...p, roadmapUpdates: v }))} />
+        <Toggle label="Achievement Unlocks" desc="Be notified when you earn a new badge" checked={notifications.achievements} onChange={v => setNotifications(p => ({ ...p, achievements: v }))} />
+        <Toggle label="Weekly Digest" desc="A weekly summary of your progress" checked={notifications.weeklyDigest} onChange={v => setNotifications(p => ({ ...p, weeklyDigest: v }))} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <button className="edit-save-btn" onClick={handleSaveNotifications} style={{ padding: '0.45rem 1.25rem', fontSize: '0.8rem' }}>
+            {saved ? '✓ Saved' : 'Save Preferences'}
+          </button>
+        </div>
+      </Section>
+
+      {/* Privacy */}
+      <Section title="🔒 Privacy">
+        <Toggle label="Public Profile" desc="Allow others to view your profile and progress" checked={privacy.showProfile} onChange={v => setPrivacy(p => ({ ...p, showProfile: v }))} />
+        <Toggle label="Show Progress on Leaderboard" desc="Display your quiz score on public leaderboards" checked={privacy.showProgress} onChange={v => setPrivacy(p => ({ ...p, showProgress: v }))} />
+      </Section>
+
+      {/* Account */}
+      <Section title="⚙️ Account">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Sign Out</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--color-dash-text-muted)', marginTop: 2 }}>Sign out of your account on this device</div>
+            </div>
+            <button onClick={onLogout} style={{
+              padding: '0.45rem 1.1rem', borderRadius: 20, fontSize: '0.78rem', fontWeight: 700,
+              border: '2px solid var(--color-dash-border)', background: 'transparent',
+              color: 'var(--color-dash-text-muted)', cursor: 'pointer', fontFamily: 'inherit',
+            }}>Sign Out</button>
+          </div>
+          <div style={{ borderTop: '1px solid var(--color-dash-border)', paddingTop: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-dash-red)' }}>Delete Account</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--color-dash-text-muted)', marginTop: 2 }}>Permanently delete your account and all data</div>
+            </div>
+            {!deleteConfirm ? (
+              <button onClick={() => setDeleteConfirm(true)} style={{
+                padding: '0.45rem 1.1rem', borderRadius: 20, fontSize: '0.78rem', fontWeight: 700,
+                border: '2px solid var(--color-dash-red)', background: 'transparent',
+                color: 'var(--color-dash-red)', cursor: 'pointer', fontFamily: 'inherit',
+              }}>Delete</button>
+            ) : (
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button onClick={() => setDeleteConfirm(false)} style={{ padding: '0.4rem 0.9rem', borderRadius: 20, fontSize: '0.75rem', fontWeight: 700, border: '1px solid var(--color-dash-border)', background: 'transparent', color: 'var(--color-dash-text-muted)', cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+                <button onClick={() => { setDeleteConfirm(false); alert('Account deletion requires contacting support.'); }} style={{ padding: '0.4rem 0.9rem', borderRadius: 20, fontSize: '0.75rem', fontWeight: 700, border: 'none', background: 'var(--color-dash-red)', color: '#fff', cursor: 'pointer', fontFamily: 'inherit' }}>Confirm Delete</button>
+              </div>
+            )}
+          </div>
+        </div>
+      </Section>
     </div>
   );
 }

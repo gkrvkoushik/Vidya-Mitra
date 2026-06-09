@@ -45,3 +45,5 @@ Get your personalised roadmap based on skill and pace of learning
 7. AI Powered Mock Interview (Final Integration - not to be implemented now)
 
 
+The roadmap for selected skill should be given to llm agent and it has to be displayed to user with progressive steps also it should show the actual roadmap and also show required skills and current skills beside each stage.
+I could see the roadmap is not giving correct data. Check it once.
