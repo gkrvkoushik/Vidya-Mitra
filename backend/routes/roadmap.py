@@ -32,33 +32,41 @@ def _doc_key(uid: str, role: str) -> str:
 
 
 def _get_skills_context(uid: str) -> dict:
-    """Pull skills from latest completed analysis session."""
+    """Pull skills from latest completed analysis session.
+    Two-stage: with status filter first, fallback to uid-only query.
+    """
+    db = get_db()
+
+    def _pick_latest(docs_iter):
+        rows = [d.to_dict() for d in docs_iter]
+        return sorted(rows, key=lambda x: x.get("createdAt") or 0, reverse=True)[0] if rows else None
+
     try:
-        db = get_db()
-        docs = (
+        # Stage 1 — uid + status (composite index)
+        latest = _pick_latest(
             db.collection("analysis_sessions")
             .where(filter=FieldFilter("uid", "==", uid))
             .where(filter=FieldFilter("status", "==", "completed"))
-            .limit(5)
+            .limit(10)
             .stream()
         )
-        sessions = sorted(
-            [d.to_dict() for d in docs],
-            key=lambda x: x.get("createdAt") or 0,
-            reverse=True,
-        )
-        if sessions:
-            s = sessions[0]
-            # Use matchedSkills + matchedPreferred as current skills (all skills user has that were identified)
-            matched = s.get("matchedSkills", [])
-            matched_preferred = s.get("matchedPreferred", [])
-            all_current = list(dict.fromkeys(matched + matched_preferred))  # dedupe, preserve order
+        # Stage 2 — uid only (single-field index, always works)
+        if not latest:
+            latest = _pick_latest(
+                db.collection("analysis_sessions")
+                .where(filter=FieldFilter("uid", "==", uid))
+                .limit(10)
+                .stream()
+            )
+        if latest:
+            matched = latest.get("matchedSkills") or []
+            preferred = latest.get("matchedPreferred") or []
             return {
-                "skills": all_current,
-                "missing_skills": s.get("missingSkills", []),
+                "skills": list(dict.fromkeys(matched + preferred)),
+                "missing_skills": latest.get("missingSkills") or [],
             }
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[roadmap] _get_skills_context error: {e}")
     return {"skills": [], "missing_skills": []}
 
 

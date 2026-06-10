@@ -539,6 +539,7 @@ def save_to_firestore_node(state: CareerState) -> CareerState:
             "strengths": state.get("strengths", []),
             "weaknesses": state.get("weaknesses", []),
             "recommendations": state.get("recommendations", []),
+            "skills": state.get("skills", []),
             "createdAt": SERVER_TIMESTAMP,
         })
 

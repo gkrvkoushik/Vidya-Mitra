@@ -214,10 +214,6 @@ export default function Roadmap({ user, firebaseUser }) {
   const handleGenerate = async () => {
     const role = configRole.trim() || activeRole || '';
     if (!role) { setError('Enter a target role.'); return; }
-    if (!ctx.skills?.length && !ctx.missing_skills?.length) {
-      setError('No skills data found. Please complete a resume analysis first to get an accurate roadmap.');
-      return;
-    }
     setGenerating(true); setError('');
     try {
       const res = await generateRoadmap(firebaseUser.uid, role, ctx.missing_skills || [], ctx.skills || [], configPace);
@@ -305,8 +301,8 @@ export default function Roadmap({ user, firebaseUser }) {
                 </span>
               )}
               {!ctx.skills?.length && !ctx.missing_skills?.length && (
-                <span style={{ fontSize: '0.7rem', color: 'var(--color-dash-red)', marginTop: '0.25rem' }}>
-                  ⚠ No resume analysis found. Complete a resume analysis for a personalised roadmap.
+                <span style={{ fontSize: '0.7rem', color: 'var(--color-dash-gold)', marginTop: '0.25rem' }}>
+                  ⚠ No resume analysis detected — roadmap will be generated based on the role's standard requirements. Complete a resume analysis for a personalised plan.
                 </span>
               )}
             </div>
@@ -359,7 +355,7 @@ export default function Roadmap({ user, firebaseUser }) {
         <div className="dash-section-card" style={{ textAlign: 'center', padding: '3rem' }}>
           <p style={{ color: 'var(--color-dash-text-muted)', marginBottom: '1rem' }}>
             {ctx.skills?.length === 0 && ctx.missing_skills?.length === 0
-              ? '⚠ Complete a resume analysis first to get a skills-aware personalised roadmap.'
+              ? 'No resume analysis found yet — you can still generate a role-based roadmap. Complete a resume analysis for a personalised skill-aware plan.'
               : 'No roadmaps yet. Click "+ New Roadmap" to generate your first plan.'}
           </p>
           <button className="edit-save-btn" onClick={() => setShowConfig(true)}>Create Your First Roadmap →</button>

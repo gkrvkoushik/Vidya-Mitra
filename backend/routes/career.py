@@ -31,33 +31,51 @@ class RoleSelectRequest(BaseModel):
 
 
 def _get_skills_context(uid: str, fallback_skills: List[str]) -> dict:
-    """Fetch latest analysis session skills from Firestore."""
+    """Fetch latest analysis session skills from Firestore.
+    Uses two-stage query: first with status filter, fallback without.
+    This handles missing composite indexes gracefully.
+    """
+    db = get_db()
+    empty = {"skills": fallback_skills, "missing_skills": [], "ats_score": 0, "match_percentage": 0, "session_id": ""}
+
+    def _pick_latest(docs_iter):
+        rows = [d.to_dict() for d in docs_iter]
+        if not rows:
+            return None
+        # Sort in Python to avoid needing a composite index on createdAt
+        return sorted(rows, key=lambda x: x.get("createdAt") or 0, reverse=True)[0]
+
     try:
-        db = get_db()
-        docs = (
+        # Stage 1 — filter by uid + status (requires composite index)
+        latest = _pick_latest(
             db.collection("analysis_sessions")
             .where(filter=FieldFilter("uid", "==", uid))
             .where(filter=FieldFilter("status", "==", "completed"))
-            .limit(5)
+            .limit(10)
             .stream()
         )
-        sessions = sorted(
-            [d.to_dict() for d in docs],
-            key=lambda x: x.get("createdAt") or 0,
-            reverse=True,
-        )
-        if sessions:
-            latest = sessions[0]
+        # Stage 2 — fallback: filter by uid only (single-field index, always works)
+        if not latest:
+            latest = _pick_latest(
+                db.collection("analysis_sessions")
+                .where(filter=FieldFilter("uid", "==", uid))
+                .limit(10)
+                .stream()
+            )
+        if latest:
+            matched = latest.get("matchedSkills") or []
+            preferred = latest.get("matchedPreferred") or []
+            all_skills = list(dict.fromkeys(matched + preferred)) or fallback_skills
             return {
-                "skills": latest.get("matchedSkills", []) or fallback_skills,
-                "missing_skills": latest.get("missingSkills", []),
+                "skills": all_skills,
+                "missing_skills": latest.get("missingSkills") or [],
                 "ats_score": latest.get("atsScore", 0),
                 "match_percentage": latest.get("matchPercentage", 0),
                 "session_id": latest.get("sessionId", ""),
             }
     except Exception as e:
         print(f"[career] _get_skills_context error: {e}")
-    return {"skills": fallback_skills, "missing_skills": [], "ats_score": 0, "match_percentage": 0, "session_id": ""}
+    return empty
 
 
 @router.post("/recommend")

@@ -23,6 +23,8 @@ async function get(path) {
 export const analyzeResume = (uid, resumeUrl, resumeText, jobDescription) =>
   post('/api/resume/analyze', { uid, resume_url: resumeUrl, resume_text: resumeText, job_description: jobDescription });
 
+export const getLatestAnalysis = (uid) => get(`/api/resume/latest/${uid}`);
+
 // Career Paths
 export const recommendCareers = (uid, skills, education, experience) =>
   post('/api/career/recommend', { uid, skills, education, experience });

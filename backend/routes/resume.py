@@ -76,3 +76,55 @@ async def analyze_resume(req: AnalyzeRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/latest/{uid}")
+async def get_latest_analysis(uid: str):
+    """Retrieve the latest completed analysis session for a user."""
+    try:
+        from firebase_admin_init import get_db
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        
+        db = get_db()
+        
+        def _pick_latest(docs_iter):
+            rows = [d.to_dict() for d in docs_iter]
+            if not rows:
+                return None
+            return sorted(rows, key=lambda x: x.get("createdAt") or 0, reverse=True)[0]
+
+        latest = _pick_latest(
+            db.collection("analysis_sessions")
+            .where(filter=FieldFilter("uid", "==", uid))
+            .where(filter=FieldFilter("status", "==", "completed"))
+            .limit(10)
+            .stream()
+        )
+        if not latest:
+            latest = _pick_latest(
+                db.collection("analysis_sessions")
+                .where(filter=FieldFilter("uid", "==", uid))
+                .limit(10)
+                .stream()
+            )
+
+        if not latest:
+            return {"status": "none"}
+
+        # Fallback to matchedSkills if skills list is not explicitly stored in historical data
+        return {
+            "status": "success",
+            "session_id": latest.get("sessionId"),
+            "ats_score": latest.get("atsScore", 0),
+            "match_percentage": latest.get("matchPercentage", 0),
+            "matched_skills": latest.get("matchedSkills", []),
+            "missing_skills": latest.get("missingSkills", []),
+            "strengths": latest.get("strengths", []),
+            "weaknesses": latest.get("weaknesses", []),
+            "recommendations": latest.get("recommendations", []),
+            "skills": latest.get("skills", latest.get("matchedSkills", [])),
+            "job_description": latest.get("jobDescription", ""),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

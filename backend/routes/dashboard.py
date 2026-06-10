@@ -24,22 +24,26 @@ async def get_dashboard_data(uid: str):
         user_doc = db.collection("users").document(uid).get()
         user_data = user_doc.to_dict() if user_doc.exists else {}
 
-        # ── Latest analysis session (sort in Python — no composite index needed)
-        raw_sessions = (
+        # ── Latest analysis session ─────────────────────────────────────────────────
+        # Two-stage: status-filtered first, uid-only fallback (handles missing composite index)
+        def _latest_session(docs_iter):
+            rows = [d.to_dict() for d in docs_iter]
+            return rows, (sorted(rows, key=lambda x: x.get("createdAt") or 0, reverse=True)[0] if rows else None)
+
+        rows, latest_analysis = _latest_session(
             db.collection("analysis_sessions")
             .where(filter=FieldFilter("uid", "==", uid))
             .where(filter=FieldFilter("status", "==", "completed"))
-            .limit(10)
-            .stream()
+            .limit(10).stream()
         )
-        sessions = sorted(
-            [d.to_dict() for d in raw_sessions],
-            key=lambda x: x.get("createdAt") or 0,
-            reverse=True,
-        )
-        latest_analysis = sessions[0] if sessions else None
+        if not latest_analysis:
+            rows, latest_analysis = _latest_session(
+                db.collection("analysis_sessions")
+                .where(filter=FieldFilter("uid", "==", uid))
+                .limit(10).stream()
+            )
 
-        print(f"[Dashboard] uid={uid} | found {len(sessions)} sessions | latest atsScore={latest_analysis.get('atsScore') if latest_analysis else 'N/A'}")
+        print(f"[Dashboard] uid={uid} | found {len(rows)} sessions | latest atsScore={latest_analysis.get('atsScore') if latest_analysis else 'N/A'}")
 
         # ── Roadmaps ──────────────────────────────────────────────────────────
         roadmap_docs = list(

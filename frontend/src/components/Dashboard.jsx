@@ -541,54 +541,6 @@ export default function Dashboard({ user, firebaseUser, theme, setTheme, onLogou
 
           {/* Top level controls */}
           <div className="dash-topbar-controls">
-            {activeMenu === 'Resume Analysis' && (
-              <>
-                {/* Re-upload Resume Button */}
-                <button 
-                  className="btn btn-secondary" 
-                  style={{ 
-                    borderRadius: '10px', 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    gap: '0.45rem', 
-                    padding: '0.5rem 1rem', 
-                    fontSize: '0.82rem',
-                    fontWeight: '700'
-                  }}
-                  onClick={() => document.getElementById('resume-uploader-header')?.click()}
-                  disabled={isUploading}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="17 8 12 3 7 8" />
-                    <line x1="12" y1="3" x2="12" y2="15" />
-                  </svg>
-                  {isUploading ? 'Analyzing...' : 'Re-upload Resume'}
-                </button>
-                <input
-                  type="file"
-                  id="resume-uploader-header"
-                  style={{ display: 'none' }}
-                  accept=".pdf,.doc,.docx"
-                  onChange={handleResumeUpload}
-                />
-
-                {/* Download Button */}
-                <button 
-                  className="dash-control-btn" 
-                  style={{ borderRadius: '8px' }} 
-                  onClick={handleDownload} 
-                  title="Download Resume"
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
-                </button>
-              </>
-            )}
-
             {/* Theme Toggle Button */}
             <button 
               className="dash-control-btn"
