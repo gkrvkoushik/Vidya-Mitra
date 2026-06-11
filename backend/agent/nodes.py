@@ -379,9 +379,9 @@ CRITICAL RULES:
 3. NEVER add a week to teach a skill that is already in the "EXISTING skills" list — build ON them instead.
 4. Topics must be specific and progressive: NOT "Learn Docker" but "Docker multi-stage builds and container networking".
 5. Resources must be real, actionable resources: actual course names, official documentation links, or books.
-6. required_skills: list 1-3 prerequisites this week needs. These MUST be skills from the "EXISTING skills" list OR skills gained in PREVIOUS weeks of this roadmap.
-7. current_skills_used: list 1-3 skills from the "EXISTING skills" list that the candidate already knows and will actively use this week. Do NOT include skills learned during the roadmap here. If none apply, use [].
-8. skill_gained: the EXACT skill from the "MUST LEARN" gaps list that this week teaches and the user will acquire. (If the week teaches a specialized topic not in the gaps list, use that new skill name).
+6. required_skills: list 1-3 prerequisites this week needs that were gained in PREVIOUS weeks of this roadmap. Do NOT include skills from the "EXISTING skills" list here, as the user already knows them.
+7. current_skills_used: list 1-3 skills from the "EXISTING skills" list that the candidate already knows and will actively use this week. Do NOT include any progressive skills learned during the roadmap here. If none are relevant, you MUST use [].
+8. skill_gained: MUST be a single, short skill name. It MUST be chosen from the "Skills candidate MUST LEARN" list ({skills_to_learn}) if the week addresses one of those gaps. Multiple weeks can target/gain the same skill (e.g. if two weeks cover Docker, both weeks must have "Docker" as the skill_gained). Under no circumstances should you invent custom long strings (like "Docker Multi-Stage Builds") or combine multiple skills (like "Python and CI/CD") for this field. If a week does not address any skill from the MUST LEARN list, it must gain a simple, short skill name (1-2 words max).
 9. skill_alignment: list 1-3 skills this week directly builds upon (can be from the "EXISTING skills" list or skills gained in PREVIOUS weeks).
 10. estimated_hours: Beginner=8-15h, Intermediate=15-25h, Advanced=20-35h.
 11. Role Relevance: Every topic, description, and resource must be directly context-aligned and relevant to the target role of {role}.
@@ -395,9 +395,9 @@ Return ONLY valid JSON:
       "description": "<2-3 sentences: what to learn and why it matters for {role}>",
       "difficulty": "<Beginner|Intermediate|Advanced>",
       "estimated_hours": <int>,
-      "skill_gained": "<exact skill from MUST LEARN list or new concrete skill>",
-      "required_skills": ["<prerequisite from EXISTING skills or PREVIOUS weeks>"],
-      "current_skills_used": ["<skill from EXISTING list used this week>"],
+      "skill_gained": "<exact short skill name from MUST LEARN list or new short skill>",
+      "required_skills": ["<prerequisite gained in PREVIOUS weeks only>"],
+      "current_skills_used": ["<starting skill from EXISTING list used this week>"],
       "skill_alignment": ["<skill from EXISTING list or PREVIOUS weeks this builds upon>"],
       "resources": ["<Real Resource 1>", "<Real Resource 2>"]
     }}
@@ -416,22 +416,116 @@ Generate exactly {weeks} weeks. Each week must build progressively. Weeks must c
     parsed = _parse_json(response.content)
     roadmap = parsed.get("roadmap", [])
 
+    already_known_lower = {s.lower() for s in already_known}
+    already_known_map = {s.lower(): s for s in already_known}
+    skills_to_learn_lower = {s.lower() for s in skills_to_learn}
+    skills_to_learn_map = {s.lower(): s for s in skills_to_learn}
+
     validated = []
+    previous_gained = set()
+
     for i, week in enumerate(roadmap):
         if not isinstance(week, dict):
             continue
+
+        # 1. Clean skill_gained to match a skill from the MUST LEARN list
+        gained = week.get("skill_gained", "").strip()
+        gained_lower = gained.lower()
+        matched_skill = None
+        for s in skills_to_learn:
+            if s.lower() in gained_lower or gained_lower in s.lower():
+                matched_skill = s
+                break
+        if matched_skill:
+            skill_gained_cleaned = matched_skill
+        else:
+            words = gained.split()
+            skill_gained_cleaned = " ".join(words[:2]) if len(words) > 3 else gained
+
+        # 2. Process required_skills and current_skills_used to resolve duplicates & conflicts
+        req_raw = week.get("required_skills", [])
+        curr_raw = week.get("current_skills_used", [])
+        if not isinstance(req_raw, list):
+            req_raw = [req_raw] if req_raw else []
+        if not isinstance(curr_raw, list):
+            curr_raw = [curr_raw] if curr_raw else []
+
+        req_cleaned = []
+        curr_cleaned = []
+
+        # Check required_skills
+        for r in req_raw:
+            if not isinstance(r, str):
+                continue
+            r_clean = r.strip()
+            r_lower = r_clean.lower()
+            if r_lower in already_known_lower:
+                # Actually belongs to current_skills_used since it's an initial existing skill
+                if already_known_map[r_lower] not in curr_cleaned:
+                    curr_cleaned.append(already_known_map[r_lower])
+            elif r_clean in previous_gained or any(pg.lower() == r_lower for pg in previous_gained):
+                # Valid prerequisite gained in a previous week
+                pg_exact = next((pg for pg in previous_gained if pg.lower() == r_lower), r_clean)
+                if pg_exact not in req_cleaned:
+                    req_cleaned.append(pg_exact)
+
+        # Check current_skills_used
+        for c in curr_raw:
+            if not isinstance(c, str):
+                continue
+            c_clean = c.strip()
+            c_lower = c_clean.lower()
+            if c_lower in already_known_lower:
+                if already_known_map[c_lower] not in curr_cleaned:
+                    curr_cleaned.append(already_known_map[c_lower])
+            elif c_clean in previous_gained or any(pg.lower() == c_lower for pg in previous_gained):
+                # Actually belongs to required_skills since it was learned during the roadmap
+                pg_exact = next((pg for pg in previous_gained if pg.lower() == c_lower), c_clean)
+                if pg_exact not in req_cleaned:
+                    req_cleaned.append(pg_exact)
+
+        # 3. Clean skill_alignment
+        align_raw = week.get("skill_alignment", [])
+        if not isinstance(align_raw, list):
+            align_raw = [align_raw] if align_raw else []
+        align_cleaned = []
+        for a in align_raw:
+            if not isinstance(a, str):
+                continue
+            a_clean = a.strip()
+            a_lower = a_clean.lower()
+            if a_lower in already_known_lower:
+                align_cleaned.append(already_known_map[a_lower])
+            elif a_clean in previous_gained or any(pg.lower() == a_lower for pg in previous_gained):
+                pg_exact = next((pg for pg in previous_gained if pg.lower() == a_lower), a_clean)
+                align_cleaned.append(pg_exact)
+            elif a_lower in skills_to_learn_lower:
+                align_cleaned.append(skills_to_learn_map[a_lower])
+            else:
+                align_cleaned.append(a_clean)
+
+        align_cleaned = list(dict.fromkeys(align_cleaned))
+
+        resources_raw = week.get("resources", [])
+        if not isinstance(resources_raw, list):
+            resources_raw = [resources_raw] if resources_raw else []
+        resources_cleaned = [str(r).strip() for r in resources_raw if r]
+
         validated.append({
             "week": week.get("week", i + 1),
             "topic": week.get("topic", f"Week {i+1} Topic"),
             "description": week.get("description", ""),
             "difficulty": week.get("difficulty", "Intermediate"),
             "estimated_hours": week.get("estimated_hours", 10),
-            "skill_gained": week.get("skill_gained", ""),
-            "required_skills": week.get("required_skills", []),
-            "current_skills_used": week.get("current_skills_used", []),
-            "skill_alignment": week.get("skill_alignment", []),
-            "resources": week.get("resources", []),
+            "skill_gained": skill_gained_cleaned,
+            "required_skills": req_cleaned,
+            "current_skills_used": curr_cleaned,
+            "skill_alignment": align_cleaned,
+            "resources": resources_cleaned,
         })
+
+        # Add current week's cleaned gained skill to previous_gained
+        previous_gained.add(skill_gained_cleaned)
 
     print(f"[RoadmapNode] validated {len(validated)} weeks")
     return {**state, "roadmap": validated}
