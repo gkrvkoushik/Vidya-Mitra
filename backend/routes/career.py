@@ -108,14 +108,32 @@ Current Skills: {ctx['skills']}
 Skill Gaps: {ctx['missing_skills']}
 Education: {req.education}
 
-Recommend 4-5 suitable career roles. Return ONLY valid JSON:
+Choose EXACTLY 3-4 career paths from this list of standard roles:
+[
+  "Backend Developer",
+  "Full Stack Developer",
+  "Frontend Developer",
+  "AI Engineer",
+  "Data Scientist",
+  "Data Analyst",
+  "DevOps Engineer",
+  "Cloud Engineer",
+  "Cybersecurity Analyst",
+  "Network Engineer",
+  "Mobile App Developer"
+]
+
+Rules:
+1. Select only from the list of standard roles above.
+2. Match candidate skills realistically to the chosen roles.
+3. Return ONLY valid JSON:
 {{
   "recommended_roles": [
     {{
-      "title": "Software Engineer",
+      "title": "<Role Title from the list>",
       "match_percentage": 85,
       "salary_range": "$80K - $120K",
-      "reason": "Strong technical foundation aligns well",
+      "reason": "<reason why candidate fits>",
       "certifications": ["AWS Certified", "Google Cloud"]
     }}
   ]

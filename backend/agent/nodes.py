@@ -338,16 +338,81 @@ Return ONLY valid JSON:
     }
 
 
+# ── Career Path Templates & Helper ─────────────────────────────────────────────
+ROLE_TEMPLATES = {
+    "Backend Developer": ["Python", "SQL", "APIs", "Docker", "Databases", "Git", "CI/CD", "Cloud Computing"],
+    "Full Stack Developer": ["React", "Node.js", "JavaScript", "HTML/CSS", "SQL", "APIs", "Git", "Docker"],
+    "Frontend Developer": ["React", "JavaScript", "HTML/CSS", "Tailwind CSS", "TypeScript", "Git", "APIs"],
+    "AI Engineer": ["Python", "Machine Learning", "Deep Learning", "NLP", "APIs", "Git", "Cloud Computing"],
+    "Data Scientist": ["Python", "SQL", "Machine Learning", "Data Analysis", "Statistics", "Git"],
+    "Data Analyst": ["SQL", "Excel", "Tableau", "Python", "Data Analysis", "Statistics"],
+    "DevOps Engineer": ["Docker", "Kubernetes", "CI/CD", "Cloud Computing", "Linux", "Git", "Infrastructure as Code"],
+    "Cloud Engineer": ["Cloud Computing", "Linux", "Docker", "Networking", "Git", "CI/CD", "Kubernetes"],
+    "Cybersecurity Analyst": ["Networking", "Linux", "Security Principles", "Cryptography", "Python", "Threat Analysis"],
+    "Network Engineer": ["Networking", "Cisco", "Linux", "Python", "Security Principles", "Cloud Computing"],
+    "Mobile App Developer": ["Kotlin", "Swift", "Mobile Design", "APIs", "Git", "OOP"]
+}
+
+
+def _get_role_standard_skills(role: str) -> list:
+    role_lower = role.lower().strip()
+    # Check exact match first
+    for k, v in ROLE_TEMPLATES.items():
+        if k.lower() == role_lower:
+            return v
+    # Check partial match (e.g. "Network Technician" -> "Network Engineer")
+    for k, v in ROLE_TEMPLATES.items():
+        if k.lower() in role_lower or role_lower in k.lower():
+            return v
+    # Fallback: query LLM to get 6-8 core technical skills for this custom role
+    try:
+        llm = get_llm()
+        prompt = f"""List the top 6-8 core, standard technical skills, technologies, or concepts required for the role of "{role}".
+Return ONLY a valid JSON list of strings (short skill names, e.g. "Python", "SQL", "Docker"). No explanations, no numbering.
+Example: ["Python", "SQL", "Docker"]
+"""
+        response = llm.invoke(prompt)
+        parsed = _parse_json(response.content)
+        if isinstance(parsed, list):
+            return [str(s).strip() for s in parsed if s]
+    except Exception as e:
+        print(f"[_get_role_standard_skills] Error fetching skills for {role}: {e}")
+    # Default fallback
+    return ["Python", "Git", "Docker", "Cloud Computing", "SQL", "CI/CD"]
+
+
 def career_path_node(state: CareerState) -> CareerState:
     """Recommend top 3 career paths based on skills and profile."""
     llm = get_llm()
-    prompt = f"""Based on candidate profile:
-- Skills: {state.get('skills', [])}
-- Education: {state.get('profile', {}).get('education', '')}
-- Experience: {state.get('profile', {}).get('experience', [])}
+    skills = state.get("skills", [])
+    education = state.get("profile", {}).get("education", "")
+    experience = state.get("profile", {}).get("experience", [])
 
-Recommend exactly 3 career paths.
-Return ONLY valid JSON with key: roles (list of objects each with: title, match_percentage, salary_range, certifications (list), reason)
+    prompt = f"""Based on the candidate profile:
+- Skills: {skills}
+- Education: {education}
+- Experience: {experience}
+
+Choose EXACTLY 3 career paths from this list of standard roles:
+[
+  "Backend Developer",
+  "Full Stack Developer",
+  "Frontend Developer",
+  "AI Engineer",
+  "Data Scientist",
+  "Data Analyst",
+  "DevOps Engineer",
+  "Cloud Engineer",
+  "Cybersecurity Analyst",
+  "Network Engineer",
+  "Mobile App Developer"
+]
+
+Rules:
+1. Select only from the list of standard roles above.
+2. Match candidate skills realistically to the chosen roles.
+3. Provide a realistic match percentage (integer between 0 and 100), estimated salary range, list of recommended certifications, and a clear reason explaining why this path fits the candidate.
+4. Return ONLY valid JSON with key "roles" (list of objects each with: title, match_percentage, salary_range, certifications (list), reason).
 """
     response = llm.invoke(prompt)
     parsed = _parse_json(response.content)
@@ -359,8 +424,23 @@ def roadmap_node(state: CareerState) -> CareerState:
     llm = get_llm()
     role = state.get("selected_role", "Software Engineer")
     current_skills = state.get("skills", [])
-    missing_skills = state.get("missing_skills", [])
+    
+    # 1. Fetch standard skills for the target role
+    role_skills = _get_role_standard_skills(role)
+    
+    # 2. Subtract current skills to compute missing skills
+    current_skills_lower = {s.lower().strip() for s in current_skills}
+    missing_skills = [s for s in role_skills if s.lower().strip() not in current_skills_lower]
+    
+    # Ensure there are at least 3 missing skills if they somehow knew everything,
+    # so we don't have an empty roadmap.
+    if not missing_skills:
+        missing_skills = role_skills[:3]
+        
     weeks = state.get("roadmap_weeks", 8)
+    
+    # Bounding the weeks to prevent hallucination / overstretching when gaps are few
+    weeks = max(3, min(weeks, len(missing_skills) * 2))
 
     already_known = current_skills[:30]
     skills_to_learn = missing_skills[:30]
@@ -528,7 +608,12 @@ Generate exactly {weeks} weeks. Each week must build progressively. Weeks must c
         previous_gained.add(skill_gained_cleaned)
 
     print(f"[RoadmapNode] validated {len(validated)} weeks")
-    return {**state, "roadmap": validated}
+    return {
+        **state,
+        "skills": current_skills,
+        "missing_skills": missing_skills,
+        "roadmap": validated
+    }
 
 
 def quiz_generation_node(state: CareerState) -> CareerState:

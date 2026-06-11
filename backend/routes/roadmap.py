@@ -102,16 +102,16 @@ async def generate_roadmap(req: RoadmapRequest):
             "roadmap": roadmap,
             "progressPercentage": 0,
             "completedTopics": [],
-            "currentSkills": current_skills,
-            "missingSkills": missing_skills,
+            "currentSkills": result.get("skills", current_skills),
+            "missingSkills": result.get("missing_skills", missing_skills),
             "generatedAt": SERVER_TIMESTAMP,
         })
         return {
             "roadmap": roadmap,
             "role": req.selected_role,
             "learning_pace": req.learning_pace,
-            "current_skills": current_skills,
-            "missing_skills": missing_skills,
+            "current_skills": result.get("skills", current_skills),
+            "missing_skills": result.get("missing_skills", missing_skills),
         }
     except HTTPException:
         raise
