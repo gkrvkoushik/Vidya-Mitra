@@ -206,7 +206,7 @@ Return ONLY valid JSON:
     conf_scores = [h["confidence_score"] for h in history]
     comp_scores = [h["completeness_score"] for h in history]
 
-    print(f"[InterviewEval] Q#{state.get('question_number', 0) + 1} overall={overall} → next difficulty={new_difficulty}")
+    print(f"[InterviewEval] Q#{state.get('question_number', 0) + 1} overall={overall} -> next difficulty={new_difficulty}")
 
     return {
         **state,
@@ -316,7 +316,7 @@ Return ONLY valid JSON:
             rec = "Needs Improvement"
         parsed["hiring_recommendation"] = rec
 
-    print(f"[InterviewReport] overall={overall} → {parsed.get('hiring_recommendation')}")
+    print(f"[InterviewReport] overall={overall} -> {parsed.get('hiring_recommendation')}")
 
     return {
         **state,

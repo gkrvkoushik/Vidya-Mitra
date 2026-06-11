@@ -264,7 +264,7 @@ def ats_score_node(state: CareerState) -> CareerState:
     print(
         f"[ATSScore] req={req_score:.1f}*0.80 + pref={pref_score:.1f}*0.10 + "
         f"edu={edu_score:.1f}*0.05 + exp={exp_score:.1f}*0.05 = raw {raw_ats} "
-        f"→ gated {ats} (required_ratio={required_ratio:.2f})"
+        f"-> gated {ats} (required_ratio={required_ratio:.2f})"
     )
 
     return {
