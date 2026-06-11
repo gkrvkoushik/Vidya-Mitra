@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { generateRoadmap, getAllRoadmaps, getSkillsContext, post } from '../api.js';
+import { generateRoadmap, getAllRoadmaps, getSkillsContext, post, deleteRoadmap } from '../api.js';
 
 const PACES = ['Slow', 'Moderate', 'Fast'];
 const PACE_DESC = { Slow: '12 weeks', Moderate: '8 weeks', Fast: '5 weeks' };
@@ -211,6 +211,24 @@ export default function Roadmap({ user, firebaseUser }) {
 
   const loadRoadmap = (role) => { setActiveRole(role); setData(cacheRef.current[role] || null); };
 
+  const handleDeleteRoadmap = async (role) => {
+    if (!window.confirm(`Are you sure you want to delete the roadmap for "${role}"?`)) return;
+    try {
+      await deleteRoadmap(firebaseUser.uid, role);
+      const updatedTabs = tabList.filter(t => t.role !== role);
+      setTabList(updatedTabs);
+      delete cacheRef.current[role];
+      if (updatedTabs.length > 0) {
+        loadRoadmap(updatedTabs[0].role);
+      } else {
+        setData(null);
+        setActiveRole('');
+      }
+    } catch (e) {
+      setError(`Failed to delete roadmap: ${e.message}`);
+    }
+  };
+
   const handleGenerate = async () => {
     const role = configRole.trim() || activeRole || '';
     if (!role) { setError('Enter a target role.'); return; }
@@ -373,6 +391,20 @@ export default function Roadmap({ user, firebaseUser }) {
                 <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '2px 9px', borderRadius: 20, background: `${PACE_COLOR[pace]}15`, color: PACE_COLOR[pace] }}>
                   {pace} · {PACE_DESC[pace]}
                 </span>
+                <button
+                  onClick={() => handleDeleteRoadmap(activeRole)}
+                  style={{
+                    background: 'transparent', border: 'none', color: 'var(--color-dash-red)',
+                    cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', borderRadius: '4px', transition: 'background-color 0.2s',
+                    marginLeft: '0.25rem',
+                  }}
+                  title="Delete Roadmap"
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.8 }}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                </button>
               </div>
               <span style={{ fontWeight: 800, color: 'var(--color-dash-purple)' }}>{progress}%</span>
             </div>
