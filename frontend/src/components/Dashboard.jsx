@@ -880,12 +880,7 @@ export default function Dashboard({ user, firebaseUser, theme, setTheme, onLogou
                       <span>{tip.text}</span>
                     </div>
                   ))}
-                  <button
-                    onClick={() => setChatOpen(true)}
-                    style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--color-dash-purple)', color: '#fff', border: 'none', borderRadius: '10px', padding: '0.6rem 1rem', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', width: '100%', justifyContent: 'center' }}
-                  >
-                    <AgentAvatarSVG /> Chat with Vidya AI
-                  </button>
+                  {/* Chat button removed since floating chat is always available */}
                 </div>
               </div>
 
