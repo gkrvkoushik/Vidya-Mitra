@@ -376,14 +376,15 @@ CANDIDATE PROFILE:
 CRITICAL RULES:
 1. Each week = ONE focused topic. No multi-topic weeks.
 2. First weeks MUST target the top items from the "MUST LEARN" gaps list above.
-3. NEVER add a week for a skill in the "EXISTING skills" list — build ON it instead.
-4. Topics must be specific: NOT "Learn Docker" but "Docker multi-stage builds and container networking".
-5. Resources must be real: actual course names, official docs URLs, or book titles.
-6. required_skills: list 2-4 prerequisites this week needs — pick ONLY from the EXISTING skills list above where applicable.
-7. current_skills_used: list ONLY skills from the EXISTING skills list above that the candidate will actively use this week. If none apply, use [].
-8. skill_gained: the EXACT skill from the MUST LEARN list this week addresses (if applicable), else the new skill mastered.
-9. skill_alignment: which skills from the EXISTING list this week directly builds upon.
+3. NEVER add a week to teach a skill that is already in the "EXISTING skills" list — build ON them instead.
+4. Topics must be specific and progressive: NOT "Learn Docker" but "Docker multi-stage builds and container networking".
+5. Resources must be real, actionable resources: actual course names, official documentation links, or books.
+6. required_skills: list 1-3 prerequisites this week needs. These MUST be skills from the "EXISTING skills" list OR skills gained in PREVIOUS weeks of this roadmap.
+7. current_skills_used: list 1-3 skills from the "EXISTING skills" list that the candidate already knows and will actively use this week. Do NOT include skills learned during the roadmap here. If none apply, use [].
+8. skill_gained: the EXACT skill from the "MUST LEARN" gaps list that this week teaches and the user will acquire. (If the week teaches a specialized topic not in the gaps list, use that new skill name).
+9. skill_alignment: list 1-3 skills this week directly builds upon (can be from the "EXISTING skills" list or skills gained in PREVIOUS weeks).
 10. estimated_hours: Beginner=8-15h, Intermediate=15-25h, Advanced=20-35h.
+11. Role Relevance: Every topic, description, and resource must be directly context-aligned and relevant to the target role of {role}.
 
 Return ONLY valid JSON:
 {{
@@ -395,9 +396,9 @@ Return ONLY valid JSON:
       "difficulty": "<Beginner|Intermediate|Advanced>",
       "estimated_hours": <int>,
       "skill_gained": "<exact skill from MUST LEARN list or new concrete skill>",
-      "required_skills": ["<prerequisite 1 — prefer items from EXISTING skills>", "<prerequisite 2>"],
+      "required_skills": ["<prerequisite from EXISTING skills or PREVIOUS weeks>"],
       "current_skills_used": ["<skill from EXISTING list used this week>"],
-      "skill_alignment": ["<skill from EXISTING list this builds upon>"],
+      "skill_alignment": ["<skill from EXISTING list or PREVIOUS weeks this builds upon>"],
       "resources": ["<Real Resource 1>", "<Real Resource 2>"]
     }}
   ]
