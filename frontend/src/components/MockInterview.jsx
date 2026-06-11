@@ -203,6 +203,20 @@ function InterviewLanding({ firebaseUser, onStart, onViewHistory }) {
     if (!role.trim()) { setError('Please enter a target role.'); return; }
     setError('');
     setLoading(true);
+
+    // Request microphone permission first (before entering fullscreen)
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // Release the mic tracks immediately so the SpeechRecognition engine can lock the device later
+        stream.getTracks().forEach(track => track.stop());
+      } catch (e) {
+        setError('Microphone permission is required to proceed with the mock interview. Please enable microphone access in your browser settings.');
+        setLoading(false);
+        return;
+      }
+    }
+
     try {
       const skillList    = skills.split(',').map(s => s.trim()).filter(Boolean);
       const missingList  = missingSkills.split(',').map(s => s.trim()).filter(Boolean);
